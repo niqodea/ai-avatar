@@ -9,6 +9,25 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.11"
 
+pydantic = "^2.9"
+
+[tool.poetry.group.server.dependencies]
+Pillow = "^10.4"
+torch = "^2.4"
+
+diffusers = { version = "^0.30", extras = ["torch"] }
+# Implicit diffusers dependencies
+protobuf = "^5.28"
+transformers = "^4.45"
+sentencepiece = "^0.2"
+
+# Web server
+fastapi = "^0.115"
+uvicorn = "^0.31"
+
+[tool.poetry.group.dev]
+optional = true
+
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11"
 ruff = "^0.6"
@@ -22,6 +41,11 @@ select = [
   "SIM",  # flake8-simplify
   "UP",  # pyupgrade
 ]
+
+# Solve bugbear raising B008 for Depends calls
+# Ref: https://github.com/fastapi/fastapi/issues/1522#issuecomment-1435803420
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
 
 [build-system]
 requires = ["poetry-core"]
