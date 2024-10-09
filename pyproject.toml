@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "ai-avatar"
+version = "1.0.0"
+description = "Client-server application for AI avatar generation using diffusion models"
+authors = ["Nicola De Angeli <112023843+niqodea@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.11"
+ruff = "^0.6"
+
+[tool.ruff.lint]
+select = [
+  "B",  # flake8-bugbear
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "I",  # isort
+  "SIM",  # flake8-simplify
+  "UP",  # pyupgrade
+]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
