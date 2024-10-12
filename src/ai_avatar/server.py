@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import io
 import os
 from dataclasses import dataclass
@@ -10,16 +9,10 @@ from typing import Annotated, AsyncGenerator
 import torch
 from diffusers import DDIMScheduler, StableDiffusionPipeline
 from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
-from fastapi import Depends, FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi import Depends, FastAPI, WebSocket
 from PIL import Image
 
-from ai_avatar.common import (
-    GENERATE_AVATAR_ROUTE,
-    SSE_AVATAR_EVENT,
-    SSE_MESSAGE_EVENT,
-    GenerateAvatarRequest,
-)
+from ai_avatar.common import GENERATE_AVATAR_ROUTE, GenerateAvatarParams
 
 app = FastAPI()
 
@@ -131,49 +124,43 @@ async def startup() -> None:
     AsyncStableDiffusionPipeline.init_prod_singleton()
 
 
-@app.post(f"/{GENERATE_AVATAR_ROUTE}")
+@app.websocket(f"/{GENERATE_AVATAR_ROUTE}")
 async def generate_avatar(
-    request: GenerateAvatarRequest,
+    websocket: WebSocket,
     pipeline: Annotated[
         AsyncStableDiffusionPipeline,
         Depends(AsyncStableDiffusionPipeline.get_prod_singleton),
     ],
-) -> StreamingResponse:
+) -> None:
     """
     Generates an avatar for the given image and prompt.
     """
-    return StreamingResponse(_generate_avatar_stream(request, pipeline))
 
+    await websocket.accept()
 
-async def _generate_avatar_stream(
-    request: GenerateAvatarRequest,
-    pipeline: AsyncStableDiffusionPipeline,
-) -> AsyncGenerator[str, None]:
-    yield f"event: {SSE_MESSAGE_EVENT}\ndata: Decoding subject image...\n\n"
-    image = Image.open(io.BytesIO(base64.b64decode(request.base64_image)))
+    image = Image.open(io.BytesIO(await websocket.receive_bytes()))
+    params = GenerateAvatarParams.parse_obj(await websocket.receive_json())
 
-    yield f"event: {SSE_MESSAGE_EVENT}\ndata: Generating avatar...\n\n"
+    await websocket.send_text("Received request, now generating avatar...")
 
     pipeline_stream = pipeline.run(
         ip_adapter_image=image,
-        prompt=request.prompt,
-        negative_prompt=request.negative_prompt,
-        ip_adapter_scale=request.ip_adapter_scale,
-        num_inference_steps=request.num_inference_steps,
-        generator=torch.Generator().manual_seed(request.seed),
+        prompt=params.prompt,
+        negative_prompt=params.negative_prompt,
+        ip_adapter_scale=params.ip_adapter_scale,
+        num_inference_steps=params.num_inference_steps,
+        generator=torch.Generator().manual_seed(params.seed),
     )
     while not isinstance((item := await pipeline_stream.__anext__()), Image.Image):
         if isinstance(item, str):
-            yield f"event: {SSE_MESSAGE_EVENT}\ndata: {item}\n\n"
+            await websocket.send_text(item)
             continue
         raise ValueError(f"Unexpected item type: {type(item)}")
 
     avatar = item
 
-    yield f"event: {SSE_MESSAGE_EVENT}\ndata: Encoding avatar...\n\n"
-    binary_stream = io.BytesIO()
-    avatar.save(binary_stream, format=request.output_format.name)
-    base64_avatar = base64.b64encode(binary_stream.getvalue()).decode("utf-8")
+    encoded_avatar = io.BytesIO()
+    avatar.save(encoded_avatar, format=params.output_format.value)
 
-    yield f"event: {SSE_MESSAGE_EVENT}\ndata: Sending avatar...\n\n"
-    yield f"event: {SSE_AVATAR_EVENT}\ndata: {base64_avatar}\n\n"
+    await websocket.send_text("Sending avatar...")
+    await websocket.send_bytes(encoded_avatar.getvalue())

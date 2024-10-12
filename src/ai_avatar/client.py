@@ -1,20 +1,13 @@
 import argparse
-import base64
+import asyncio
 from pathlib import Path
 
-import requests
-import sseclient
+import websockets
 
-from ai_avatar.common import (
-    GENERATE_AVATAR_ROUTE,
-    SSE_AVATAR_EVENT,
-    SSE_MESSAGE_EVENT,
-    Format,
-    GenerateAvatarRequest,
-)
+from ai_avatar.common import GENERATE_AVATAR_ROUTE, Format, GenerateAvatarParams
 
 
-def main(
+async def main(
     output_path: Path,
     image_path: Path,
     prompt: str,
@@ -24,7 +17,7 @@ def main(
     seed: int,
     server_url: str,
 ) -> None:
-    base64_image = base64.b64encode(image_path.read_bytes()).decode("utf-8")
+    bytes_image = image_path.read_bytes()
 
     if (output_extension := output_path.suffix[1:]) == "":
         raise ValueError("Output file must have an extension")
@@ -35,8 +28,7 @@ def main(
     else:
         raise ValueError(f"Unsupported output format: {output_extension}")
 
-    request = GenerateAvatarRequest(
-        base64_image=base64_image,
+    params = GenerateAvatarParams(
         prompt=prompt,
         negative_prompt=negative_prompt,
         ip_adapter_scale=ip_adapter_scale,
@@ -45,35 +37,23 @@ def main(
         output_format=output_format,
     )
 
-    print("Sending request to server...")
-    response = requests.post(
-        url=f"{server_url}/{GENERATE_AVATAR_ROUTE}",
-        json=request.model_dump(),
-        # Parameters for Server Sent Events
-        headers={"Accept": "text/event-stream"},
-        stream=True,
-    )
+    print("Initiating connection to server...")
+    async with websockets.connect(f"ws://{server_url}/{GENERATE_AVATAR_ROUTE}") as websocket:
+        print("Sending request...")
+        await websocket.send(bytes_image)
+        await websocket.send(params.model_dump_json())
 
-    if response.status_code != 200:
-        print(f"Error: {response.status_code} - {response.text}")
-        exit(1)
+        while isinstance(message := await websocket.recv(), str):
+            print(f"\033[33mServer\033[0m: {message}")
 
-    print("Listening for server events...")
-    # SSEClient expects a Generator[Bytes, None, None], but works anyway...
-    events = sseclient.SSEClient(response).events()  # type: ignore[arg-type]
+        if not isinstance(message, bytes):
+            raise ValueError(f"Unexpected message type: {type(message)}")
 
-    while (event := next(events)).event != SSE_AVATAR_EVENT:
-        if event.event == SSE_MESSAGE_EVENT:
-            print(f"\033[33mServer\033[0m: {event.data}")
-            continue
-        raise ValueError(f"Unexpected event: {event.event}")
-    events.close()
-    base64_avatar = event.data
+        encoded_avatar = message
+        print("Received avatar from server!")
 
-    print("Received avatar from server!")
     print(f"Saving avatar to path: {output_path}")
-    bytes_avatar = base64.b64decode(base64_avatar)
-    output_path.write_bytes(bytes_avatar)
+    output_path.write_bytes(encoded_avatar)
     print("\033[32mDone!\033[0m")
 
 
@@ -85,16 +65,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output",
         type=Path,
+        required=True,
         help="Path where to save the generated avatar.",
     )
     parser.add_argument(
         "--image",
         type=Path,
+        required=True,
         help="Path to the image of the subject to generate the avatar for.",
     )
     parser.add_argument(
         "--prompt",
         type=str,
+        required=True,
         help="Text prompt for generation.",
     )
     parser.add_argument(
@@ -133,18 +116,20 @@ if __name__ == "__main__":
         type=str,
         help="URL and port of the server to send generation request to.",
         required=False,
-        default="http://localhost:8000",
+        default="localhost:8000",
     )
 
     args = parser.parse_args()
 
-    main(
-        output_path=args.output,
-        image_path=args.image,
-        prompt=args.prompt,
-        negative_prompt=args.negative_prompt,
-        ip_adapter_scale=args.ip_adapter_scale,
-        num_inference_steps=args.num_inference_steps,
-        seed=args.seed,
-        server_url=args.server,
+    asyncio.run(
+        main(
+            output_path=args.output,
+            image_path=args.image,
+            prompt=args.prompt,
+            negative_prompt=args.negative_prompt,
+            ip_adapter_scale=args.ip_adapter_scale,
+            num_inference_steps=args.num_inference_steps,
+            seed=args.seed,
+            server_url=args.server,
+        )
     )

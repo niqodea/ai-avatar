@@ -12,8 +12,7 @@ python = "^3.11"
 pydantic = "^2.9"
 
 [tool.poetry.group.client.dependencies]
-requests = "^2.32"
-sseclient-py = "^1.8"
+websockets = "^13.1"
 
 [tool.poetry.group.server.dependencies]
 Pillow = "^10.4"
@@ -35,8 +34,6 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11"
 ruff = "^0.6"
-
-types-requests = "^2.32"
 
 [tool.ruff.lint]
 select = [

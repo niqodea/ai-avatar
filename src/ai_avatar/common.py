@@ -2,9 +2,6 @@ from enum import Enum
 
 from pydantic import BaseModel
 
-SSE_MESSAGE_EVENT = "message"
-SSE_AVATAR_EVENT = "avatar"
-
 GENERATE_AVATAR_ROUTE = "generate-avatar"
 
 
@@ -18,14 +15,9 @@ class Format(str, Enum):
     PNG = "PNG"
 
 
-class GenerateAvatarRequest(BaseModel):
+class GenerateAvatarParams(BaseModel):
     """
-    The request for generating an avatar.
-    """
-
-    base64_image: str
-    """
-    Base-64 encoded image of the subject to generate an avatar for.
+    The parameters for generating an avatar.
     """
 
     prompt: str
