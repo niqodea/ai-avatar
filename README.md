@@ -31,11 +31,11 @@ make install-client
 To run the server:
 
 ```sh
-make run-server
+uvicorn ai_avatar.server:app
 # You can specify a different port
-make run-server -- --port=1234
+uvicorn ai_avatar.server:app --port=1234
 # Set the MODEL_NAME env variable to use a custom base model
-MODEL_NAME='Lykon/dreamshaper-8' make run-server
+MODEL_NAME='Lykon/dreamshaper-8' uvicorn ai_avatar.server:app
 ```
 
 The server will start listening once all the models are loaded and ready.
@@ -45,10 +45,10 @@ The server will start listening once all the models are loaded and ready.
 To run the client:
 
 ```sh
-make run-client -- \
-    --output /path/to/avatar.png \
-    --image /path/to/image.png \
-    --prompt "A photo of an astronaut"
+python -m ai_avatar.client \
+    --output=/path/to/avatar.png \
+    --image=/path/to/image.png \
+    --prompt='A photo of an astronaut'
 ```
 
 The client will request a generation to the server, wait for it to finish, and save the image to the output path.
@@ -56,5 +56,5 @@ The client will request a generation to the server, wait for it to finish, and s
 To learn more about all possible arguments:
 
 ```sh
-make run-client -- --help
+python -m ai_avatar.client --help
 ```
